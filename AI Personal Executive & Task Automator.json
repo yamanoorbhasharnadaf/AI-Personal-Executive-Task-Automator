@@ -1,0 +1,379 @@
+{
+  "name": "AI Personal Executive & Task Automator",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "simple": false,
+        "filters": {
+          "q": "in:inbox -category:promotions -category:social",
+          "readStatus": "unread"
+        },
+        "options": {}
+      },
+      "id": "d745e319-83d3-4603-afba-577de694d24c",
+      "name": "New Email Received",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        112
+      ],
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "XSA4badeDTC5VlV6",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "a1",
+              "name": "messageId",
+              "type": "string",
+              "value": "={{ $json.id }}"
+            },
+            {
+              "id": "a2",
+              "name": "threadId",
+              "type": "string",
+              "value": "={{ $json.threadId }}"
+            },
+            {
+              "id": "a3",
+              "name": "subject",
+              "type": "string",
+              "value": "={{ $json.subject || \"(no subject)\" }}"
+            },
+            {
+              "id": "a4",
+              "name": "fromAddress",
+              "type": "string",
+              "value": "={{ $json.from?.value?.[0]?.address || \"\" }}"
+            },
+            {
+              "id": "a5",
+              "name": "fromName",
+              "type": "string",
+              "value": "={{ $json.from?.value?.[0]?.name || \"\" }}"
+            },
+            {
+              "id": "a6",
+              "name": "body",
+              "type": "string",
+              "value": "={{ ($json.text || ($json.html || \"\").replace(/<[^>]*>/g, \" \")).replace(/\\s+/g, \" \").trim().slice(0, 8000) }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "67774c55-3594-4896-8fe9-f7c6fad82715",
+      "name": "Clean Email",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        224,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=From: {{ $json.fromName }} <{{ $json.fromAddress }}>\nSubject: {{ $json.subject }}\n\nEmail Content:\n{{ $json.body }}",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "message": "=You are a personal executive assistant. Today is {{ $now.setZone(\"Asia/Kolkata\").toFormat(\"yyyy-MM-dd (cccc)\") }}, timezone Asia/Kolkata. Analyze the incoming email and extract actionable data. Return these keys: task_title (short actionable title), priority (exactly High, Medium or Low), deadline (YYYY-MM-DD or the string None; resolve relative dates like \"Friday\" against today), is_meeting (true if the sender requests or proposes a meeting/call), meeting_start (local ISO datetime YYYY-MM-DDTHH:mm:ss if a specific meeting time is given, otherwise None), suggested_reply (a polite, concise reply draft in plain text, signed without a name placeholder)."
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "id": "98280c64-0e8f-4f1b-b3b9-ea8a8dd9565b",
+      "name": "Gemini Email Analyzer",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        448,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "modelName": "models/gemini-3.8-flash",
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "f4e23ca8-c187-4b31-b35a-466118f84b53",
+      "name": "Google Gemini Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        464,
+        336
+      ],
+      "credentials": {
+        "googlePalmApi": {
+          "id": null,
+          "name": "Gateway credits",
+          "__aiGatewayManaged": true
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": "{\n  \"task_title\": \"Review AIVORA demo with Priya\",\n  \"priority\": \"High\",\n  \"deadline\": \"2026-10-23\",\n  \"is_meeting\": true,\n  \"meeting_start\": \"2026-10-23T15:00:00\",\n  \"suggested_reply\": \"Hi Priya, 3pm on Oct 23 works for me. I will share the slides beforehand. Best regards\"\n}"
+      },
+      "id": "dac1b82b-efab-4b25-a034-7ee1bad2a712",
+      "name": "Structured Output Parser",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        592,
+        336
+      ]
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "subject": "=Re: {{ $(\"Clean Email\").item.json.subject }}",
+        "message": "={{ $json.output.suggested_reply }}",
+        "options": {
+          "threadId": "={{ $(\"Clean Email\").item.json.threadId }}",
+          "sendTo": "={{ $(\"Clean Email\").item.json.fromAddress }}"
+        }
+      },
+      "id": "cd860ec2-d40c-4e5c-bc68-3d38934d94d5",
+      "name": "Create Reply Draft",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        800,
+        16
+      ],
+      "webhookId": "88c7d0d6-df09-4d2f-b634-aa81cd7cf7a7",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "XSA4badeDTC5VlV6",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "markAsRead",
+        "messageId": "={{ $(\"Clean Email\").item.json.messageId }}"
+      },
+      "id": "c59c30a8-089f-445c-8e1c-99f45d401ac2",
+      "name": "Mark Email as Read",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1024,
+        16
+      ],
+      "webhookId": "e797ca4c-1b41-466e-b5d0-fa325a5c8dc2",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "XSA4badeDTC5VlV6",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": false,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "c1",
+              "leftValue": "={{ $json.output.priority }}",
+              "rightValue": "High",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "id": "c2",
+              "leftValue": "={{ $json.output.is_meeting }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "id": "f7517649-672f-47fc-9b8f-e0be231dc5d4",
+      "name": "High Priority or Meeting?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        800,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "calendar": {
+          "__rl": true,
+          "mode": "list",
+          "value": "primary"
+        },
+        "start": "={{ ($json.output.meeting_start && $json.output.meeting_start !== \"None\") ? DateTime.fromISO($json.output.meeting_start, { zone: \"Asia/Kolkata\" }).toISO() : (($json.output.deadline && $json.output.deadline !== \"None\") ? DateTime.fromISO($json.output.deadline + \"T09:00:00\", { zone: \"Asia/Kolkata\" }).toISO() : $now.setZone(\"Asia/Kolkata\").plus(1, \"day\").set({ hour: 9, minute: 0, second: 0 }).toISO()) }}",
+        "end": "={{ ($json.output.meeting_start && $json.output.meeting_start !== \"None\") ? DateTime.fromISO($json.output.meeting_start, { zone: \"Asia/Kolkata\" }).plus({ hours: 1 }).toISO() : (($json.output.deadline && $json.output.deadline !== \"None\") ? DateTime.fromISO($json.output.deadline + \"T09:30:00\", { zone: \"Asia/Kolkata\" }).toISO() : $now.setZone(\"Asia/Kolkata\").plus(1, \"day\").set({ hour: 9, minute: 30, second: 0 }).toISO()) }}",
+        "additionalFields": {
+          "description": "=Priority: {{ $json.output.priority }}\nFrom: {{ $(\"Clean Email\").item.json.fromName }} <{{ $(\"Clean Email\").item.json.fromAddress }}>\nSubject: {{ $(\"Clean Email\").item.json.subject }}\n\nCreated automatically by AI Personal Executive.",
+          "summary": "={{ $json.output.task_title }}"
+        }
+      },
+      "id": "38efad24-4a15-43d2-98b4-1bc267ad1afb",
+      "name": "Create Calendar Event",
+      "type": "n8n-nodes-base.googleCalendar",
+      "typeVersion": 1.3,
+      "position": [
+        1024,
+        208
+      ],
+      "credentials": {
+        "googleCalendarOAuth2Api": {
+          "id": "Qkw10ejRI84yYLLn",
+          "name": "Google Calendar account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        464,
+        336
+      ],
+      "typeVersion": 1,
+      "id": "84db0731-9772-463e-9f6f-f8d877dea3a3",
+      "name": "Sticky Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "New Email Received": {
+      "main": [
+        [
+          {
+            "node": "Clean Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Email": {
+      "main": [
+        [
+          {
+            "node": "Gemini Email Analyzer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Email Analyzer": {
+      "main": [
+        [
+          {
+            "node": "Create Reply Draft",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "High Priority or Meeting?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Gemini Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Gemini Email Analyzer",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Structured Output Parser": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Gemini Email Analyzer",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create Reply Draft": {
+      "main": [
+        [
+          {
+            "node": "Mark Email as Read",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "High Priority or Meeting?": {
+      "main": [
+        [
+          {
+            "node": "Create Calendar Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": true,
+    "timeSavedPerExecution": 1
+  },
+  "versionId": "fcb6adfc-3057-47ac-a448-a084fcd49687",
+  "meta": {
+    "instanceId": "f8bc291326e5cde055fb9c1ceef6eb45fc13f37e03d4af34f3d3bfeeaa7c5859"
+  },
+  "nodeGroups": [],
+  "id": "sLsH4rfSMrzLUnh5",
+  "tags": []
+}
